@@ -9,12 +9,16 @@ def generate_password():
     s4 = list(string.punctuation)
     chars = s1 + s2 + s3 + s4
 
-    password_length = random.randint(10, 20)
-    password = ''
-    for i in range(password_length):
-        password += random.choice(chars)
+    password_length = random.randint(10, 16)
+    password = [
+        random.choice(s1),
+        random.choice(s2),
+        random.choice(s3),
+        random.choice(s4),
+    ] + [random.choice(chars) for _ in range(password_length)]
 
-    return password
+    random.shuffle(password)
+    return ''.join(password)
 
 
 
