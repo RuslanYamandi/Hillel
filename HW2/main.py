@@ -1,94 +1,85 @@
-import random
-import csv
-from http import HTTPStatus
-
-import requests
 from flask import Flask, Response
 from webargs import fields, validate
 from webargs.flaskparser import use_kwargs
-from faker import Faker
+import database_handler as db
 
 
 app = Flask(__name__)
 
-FILE_NAME = 'users.csv'
-
 
 @app.route('/')
-def hello_world():
+def index():
     links = [
-        '<a href="/generate_students">Generate students</a>',
-        '<a href="/get_bitcoin_value">Get Bitcoin value</a>'
+        '<a href="/order_price">Order price</a>',
+        '<a href="/get_all_info_about_track">Track info</a>',
+        '<a href="/get_albums_all_tracks_time">Albums time</a>',
     ]
 
     return '<br>'.join(links)
 
 
-@app.route('/generate_students')
+@app.route('/order_price')
 @use_kwargs(
     {
-        'count': fields.Int(missing=20, validate=validate.Range(
-            min=1, max=1000, max_inclusive=True
-        )),
+        'country': fields.Str(missing=''),
 
     },
     location='query'
 )
-def generate_students(count: int):
-    fake = Faker()
-    users = []
-    for i in range(count):
-        user = {
-            'first_name': fake.first_name(),
-            'last_name': fake.last_name(),
-            'email': fake.email(),
-            'password': fake.password(length=8),
-            'birthday': fake.date_between(start_date='-60y', end_date='-18y').isoformat()
-        }
-        users.append(user)
+def order_price(country: str):
+    query = '''
+    SELECT 
+    invoices.BillingCountry as country, 
+    ROUND(SUM(invoice_items.UnitPrice * invoice_items.Quantity), 2) as sales 
+    FROM invoice_items 
+    LEFT JOIN invoices ON invoices.invoiceId = invoice_items.invoiceId
+    WHERE invoices.BillingCountry {}
+    GROUP BY invoices.BillingCountry;
+    '''.format(f'= "{country}"' if len(country) else 'IS NOT NULL')
 
-    with open(FILE_NAME, 'w', newline='') as csvfile:
-        headers = ['first_name', 'last_name', 'email', 'password', 'birthday']
-        writer = csv.DictWriter(csvfile, fieldnames=headers)
-        writer.writeheader()
-        writer.writerows(users)
-    return users
+    result = db.execute_query(query)
+    return db.format_query_records(result)
 
 
-@app.route('/get_bitcoin_value')
+@app.route('/get_all_info_about_track')
 @use_kwargs(
     {
-        'currency': fields.Str(missing='USD'),
-        'convert': fields.Int(missing=1, validate=validate.Range(
+        'track_id': fields.Int(missing=0, validate=validate.Range(
             min=1, min_inclusive=True
         )),
     },
     location='query'
 )
-def get_bitcoin_value(currency: str, convert: int):
-    response = requests.get('https://bitpay.com/api/rates')
-    if response.status_code not in [HTTPStatus.OK]:
-        return Response('Error: something went wrong.', status=response.status_code)
+def get_all_info_about_track(track_id: int):
+    if not track_id:
+        return 'Please specify track_id as GET parameter.'
 
-    data: dict = response.json()
-    result = ''
-    symbol = ''
+    query = '''
+       SELECT 
+       tracks.*, genres.*, media_types.*, albums.*, artists.*, SUM(invoice_items.UnitPrice) as sales
+       FROM invoice_items
+       LEFT JOIN tracks ON tracks.trackId = invoice_items.TrackId
+       LEFT JOIN genres ON genres.GenreId = tracks.GenreId
+       LEFT JOIN media_types ON media_types.mediaTypeId = tracks.mediaTypeId
+       LEFT JOIN albums ON albums.AlbumId = tracks.AlbumId
+       LEFT JOIN artists ON artists.ArtistId = albums.ArtistId
+       WHERE tracks.TrackId =  {}
+       GROUP BY invoice_items.trackId
+       '''.format(track_id)
 
-    for entity in data:
-        if entity.get('code') == currency:
-            rate = entity.get('rate')
-            result = str(rate * convert)
-            break
+    result = db.execute_query(query)
+    return db.format_query_records(result)
 
-    if not result:
-        return Response('Error: currency provided is not correct.')
-    else:
-        currency_response = requests.get('https://test.bitpay.com/currencies')
-        currency_data: dict = currency_response.json()
-        for currency_entity in currency_data.get('data'):
-            if currency_entity.get('code') == currency:
-                symbol = currency_entity.get('symbol')
-                break
 
-    return symbol + result
+@app.route('/get_albums_all_tracks_time')
+def get_albums_all_tracks_time():
+    query = '''
+       SELECT 
+       albums.*, ROUND(SUM(milliseconds * 1.0) / 3600000, 2) as album_time
+       FROM tracks
+       LEFT JOIN albums ON albums.AlbumId = tracks.AlbumId
+       GROUP BY albums.AlbumId
+       '''
 
+    result = db.execute_query(query)
+    return db.format_query_records(result)
