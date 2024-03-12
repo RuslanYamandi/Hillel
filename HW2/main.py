@@ -101,15 +101,18 @@ def stats_by_city(genre: str):
 
     query = '''
           SELECT 
-          invoices.BillingCity, COUNT(invoice_items.InvoiceLineId) as counter
-          FROM invoice_items
-          LEFT JOIN invoices ON invoices.InvoiceId = invoice_items.InvoiceId
-          LEFT JOIN tracks ON tracks.TrackId = invoice_items.TrackId
-          LEFT JOIN genres ON genres.GenreId = tracks.GenreId
-          WHERE genres.Name = ?
-          GROUP BY invoices.BillingCity
-          ORDER BY counter DESC
-          LIMIT 1
+          City 
+          FROM (
+                SELECT 
+                invoices.BillingCity as City, 
+                DENSE_RANK() OVER (ORDER BY COUNT(invoice_items.InvoiceLineId) DESC) as SalesRank
+                FROM invoice_items
+                LEFT JOIN invoices ON invoices.InvoiceId = invoice_items.InvoiceId
+                LEFT JOIN tracks ON tracks.TrackId = invoice_items.TrackId
+                LEFT JOIN genres ON genres.GenreId = tracks.GenreId
+                WHERE genres.Name = ?
+                GROUP BY invoices.BillingCity
+          ) WHERE SalesRank = 1;
           '''
 
     result = db.execute_query(query=query, args=tuple(params.values()))
