@@ -13,6 +13,7 @@ def index():
         '<a href="/order_price">Order price</a>',
         '<a href="/get_all_info_about_track">Track info</a>',
         '<a href="/get_albums_all_tracks_time">Albums time</a>',
+        '<a href="/stats_by_city">Stats by city</a>',
     ]
 
     return '<br>'.join(links)
@@ -82,4 +83,37 @@ def get_albums_all_tracks_time():
        '''
 
     result = db.execute_query(query)
+    return db.format_query_records(result)
+
+
+@app.route('/stats_by_city')
+@use_kwargs(
+    {
+        'genre': fields.Str(missing=None),
+    },
+    location='query'
+)
+def stats_by_city(genre: str):
+    params = {}
+    if not genre:
+        return 'Please specify genre as GET parameter.'
+    params['genre'] = genre
+
+    query = '''
+          SELECT 
+          City 
+          FROM (
+                SELECT 
+                invoices.BillingCity as City, 
+                DENSE_RANK() OVER (ORDER BY COUNT(invoice_items.InvoiceLineId) DESC) as SalesRank
+                FROM invoice_items
+                LEFT JOIN invoices ON invoices.InvoiceId = invoice_items.InvoiceId
+                LEFT JOIN tracks ON tracks.TrackId = invoice_items.TrackId
+                LEFT JOIN genres ON genres.GenreId = tracks.GenreId
+                WHERE genres.Name = ?
+                GROUP BY invoices.BillingCity
+          ) WHERE SalesRank = 1;
+          '''
+
+    result = db.execute_query(query=query, args=tuple(params.values()))
     return db.format_query_records(result)
