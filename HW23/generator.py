@@ -1,28 +1,23 @@
-
-class WordsGenerator:
-    MAX_WORDS = 10_000
-    file_path = 'words.txt'
-
-    @classmethod
-    def generate(cls, count: int):
-        result = set()
-        if count > cls.MAX_WORDS:
-            raise Exception("Too many words requested.")
-        for line in cls._read_file():
-            if len(result) > count:
-                break
-            words = line.strip().split(' ')
-            for word in words:
-                if word:
-                    result.add(word.strip('.').strip(','))
-        return result
-
-    @classmethod
-    def _read_file(cls):
-        with open(cls.file_path, 'r') as file:
-            for line in file:
-                yield line
+import random
 
 
-words = WordsGenerator.generate(10_000)
+def read_file_lazy(file_path):
+    with open(file_path, 'r') as file:
+        for word in file:
+            yield word
+
+
+def generate_words(count: int):
+    result = set()
+    if count > 10_000:
+        raise Exception("Too many words requested.")
+    for word in read_file_lazy('words.txt'):
+        if len(result) >= count:
+            break
+        if random.randint(0, 10) < 2:
+            result.add(word.strip())
+    return result
+
+
+words = generate_words(1000)
 print(words)
